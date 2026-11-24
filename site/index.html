@@ -1,0 +1,957 @@
+<title>버킷 건물검토 MVP</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 상단 고정 바(사용자 유형·투자 목적 전역 전환) + 5단계 흐름 탭. 각 화면은 입력→판단→행동 순서의 2단 그리드, 폰에서는 1단. */
+:root{
+  --bg:#F2F4F1; --surface:#FFFFFF; --surface-2:#F7F9F6; --ink:#17201C; --muted:#5A6762; --line:#D7DDD8;
+  --accent:#0E6A59; --accent-ink:#FFFFFF; --accent-soft:#DCEDE7;
+  --auto:#2D5AA3; --auto-soft:#E1E9F6; --user:#0E6A59; --user-soft:#DCEDE7; --expert:#9A5A06; --expert-soft:#FBEED6;
+  --risk:#B0281F; --risk-soft:#F7E0DD; --good:#1D7A3E; --good-soft:#DDF0E2;
+  --font-body:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101513; --surface:#18201C; --surface-2:#1D2622; --ink:#E5ECE8; --muted:#9AA9A2; --line:#2C3833;
+  --accent:#4FC3A7; --accent-ink:#06231C; --accent-soft:#173A31;
+  --auto:#8EB2F0; --auto-soft:#1C2A45; --user:#4FC3A7; --user-soft:#173A31; --expert:#E9A84E; --expert-soft:#3A2B12;
+  --risk:#F08C82; --risk-soft:#3E1E1B; --good:#7DD69A; --good-soft:#163522; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#101513; --surface:#18201C; --surface-2:#1D2622; --ink:#E5ECE8; --muted:#9AA9A2; --line:#2C3833;
+  --accent:#4FC3A7; --accent-ink:#06231C; --accent-soft:#173A31;
+  --auto:#8EB2F0; --auto-soft:#1C2A45; --user:#4FC3A7; --user-soft:#173A31; --expert:#E9A84E; --expert-soft:#3A2B12;
+  --risk:#F08C82; --risk-soft:#3E1E1B; --good:#7DD69A; --good-soft:#163522; color-scheme:dark;}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.6;word-break:keep-all}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3,h4{margin:0;line-height:1.3;text-wrap:balance;font-weight:700}
+h2{font-size:1.35rem} h3{font-size:1.08rem} h4{font-size:.95rem}
+p{margin:0}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding-block:10px}
+.brand{display:flex;align-items:baseline;gap:8px;margin-right:auto}
+.brand b{font-size:1.05rem;letter-spacing:-.01em}
+.brand small{color:var(--muted);font-size:.78rem}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--surface-2);flex-wrap:wrap}
+.seg button{border:0;background:transparent;padding:5px 12px;border-radius:999px;cursor:pointer;font-size:.86rem;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface);font-weight:600}
+.ctl{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}
+.ctl select{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:.86rem}
+nav.steps{border-top:1px solid var(--line);overflow-x:auto}
+nav.steps .wrap{display:flex;gap:4px;padding-block:0}
+nav.steps a{display:flex;align-items:center;gap:7px;padding:10px 12px;color:var(--muted);text-decoration:none;font-size:.9rem;border-bottom:2px solid transparent;white-space:nowrap}
+nav.steps a i{font-style:normal;font-family:var(--font-num);font-size:.72rem;border:1px solid var(--line);border-radius:4px;padding:0 5px}
+nav.steps a[aria-current="page"]{color:var(--ink);border-color:var(--accent);font-weight:600}
+nav.steps a[aria-current="page"] i{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.store-pill{font-size:.74rem;padding:3px 9px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+
+main{padding-block:22px 60px}
+.view{display:grid;gap:18px}
+.head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:end;justify-content:space-between}
+.head p{color:var(--muted);max-width:68ch}
+.grid2{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;min-width:0}
+.panel.flat{background:transparent;border-style:dashed}
+.stack{display:grid;gap:14px;min-width:0;align-content:start}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.muted{color:var(--muted)}
+.small{font-size:.84rem}
+.eyebrow{font-size:.74rem;letter-spacing:.06em;color:var(--muted);font-weight:600}
+
+/* form */
+.form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form .full{grid-column:1/-1}
+.field{display:grid;gap:4px;min-width:0}
+.field label{font-size:.82rem;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);min-width:0}
+.field textarea{resize:vertical;min-height:62px}
+.field .unit{position:relative}
+.field .unit input{padding-right:46px}
+.field .unit span{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:.78rem;color:var(--muted)}
+.field.req input,.field.req select{border-color:var(--accent)}
+.field.req.missing input{background:var(--accent-soft)}
+.tag{display:inline-block;font-size:.7rem;font-weight:600;padding:1px 7px;border-radius:999px;line-height:1.6;white-space:nowrap}
+.tag.req{background:var(--accent);color:var(--accent-ink)}
+.tag.opt{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.tag.auto{background:var(--auto-soft);color:var(--auto)}
+.tag.user{background:var(--user-soft);color:var(--user)}
+.tag.expert{background:var(--expert-soft);color:var(--expert)}
+.tag.risk{background:var(--risk-soft);color:var(--risk)}
+.tag.good{background:var(--good-soft);color:var(--good)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500;font-size:.9rem;text-decoration:none;color:var(--ink)}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:4px 10px;font-size:.8rem}
+.btn.danger{color:var(--risk)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* question card */
+.q{border:1px solid var(--ink);border-radius:var(--r);padding:16px 18px;background:var(--surface);display:grid;gap:10px}
+.q .who{font-size:.78rem;color:var(--muted)}
+.q blockquote{margin:0;font-size:1.15rem;font-weight:700;line-height:1.45}
+
+/* results */
+.verdict{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:start}
+.verdict .big{font-size:1.25rem;font-weight:700;line-height:1.45}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface-2);min-width:0}
+.kpi .l{font-size:.76rem;color:var(--muted)}
+.kpi .v{font-family:var(--font-num);font-size:1.15rem;font-weight:600;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:.74rem;color:var(--muted)}
+.fit{display:grid;gap:8px}
+.fitrow{display:grid;grid-template-columns:110px minmax(0,1fr) 72px;gap:10px;align-items:center;font-size:.88rem}
+.fitrow.sel{font-weight:700}
+.bar{height:10px;border-radius:5px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--muted)}
+.fitrow.sel .bar i{background:var(--accent)}
+.src3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:640px){.src3{grid-template-columns:minmax(0,1fr)}}
+.src{border-radius:8px;padding:12px;border:1px solid var(--line);min-width:0}
+.src h4{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.src dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 10px;font-size:.82rem}
+.src dt{color:var(--muted)} .src dd{margin:0;text-align:right}
+.src ul{margin:0;padding-left:18px;font-size:.84rem}
+.src.a{border-top:3px solid var(--auto)} .src.u{border-top:3px solid var(--user)} .src.e{border-top:3px solid var(--expert)}
+.list{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.list li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;font-size:.9rem}
+.list li .tag{margin-top:3px}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-weight:600;font-size:.8rem;color:var(--muted);white-space:nowrap}
+td.r,th.r{text-align:right}
+tr:last-child td{border-bottom:0}
+.cta{border-radius:var(--r);padding:18px;background:var(--ink);color:var(--surface);display:grid;gap:10px}
+.cta .price{font-family:var(--font-num);font-size:1.5rem;font-weight:600}
+.cta p{color:color-mix(in srgb,var(--surface) 78%,transparent)}
+.cta .btn.primary{justify-self:start}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)}}
+.persona-col{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:16px;display:grid;gap:12px;align-content:start;min-width:0}
+.persona-col.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.persona-col h3{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cell{display:grid;gap:4px}
+.cell .k{font-size:.74rem;color:var(--muted);font-weight:600;letter-spacing:.03em}
+.cell ul{margin:0;padding-left:18px}
+.thread{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface-2);white-space:pre-line;font-size:.88rem;display:grid;gap:8px}
+.thread .row{justify-content:space-between}
+.mock{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:12px;font-size:.85rem;display:grid;gap:6px}
+.mock b{font-size:.95rem}
+
+/* order */
+.stepper{display:flex;flex-wrap:wrap;gap:6px}
+.stepper span{font-size:.8rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.stepper span.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.stepper span.done{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.toc{margin:0;padding-left:20px;display:grid;gap:4px;font-size:.9rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:.84rem}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.notice{font-size:.82rem;padding:10px 12px;border-radius:8px;background:var(--expert-soft);color:var(--ink)}
+
+/* candidates & assets */
+.alias{border:1px solid transparent;background:transparent;padding:3px 6px;border-radius:6px;font-weight:600;width:100%;min-width:120px}
+.alias:hover{border-color:var(--line)} .alias:focus{border-color:var(--accent);background:var(--surface-2)}
+.assets{display:flex;flex-wrap:wrap;gap:8px}
+.asset-btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;cursor:pointer;text-align:left;display:grid;font-size:.86rem}
+.asset-btn small{color:var(--muted);font-size:.75rem}
+.asset-btn[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.typechips{display:flex;flex-wrap:wrap;gap:6px}
+.empty{padding:22px;text-align:center;color:var(--muted);display:grid;gap:10px;justify-items:center}
+.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px;font-size:.86rem}
+.cols label{display:flex;gap:6px;align-items:center}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:8px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px)}
+details summary{cursor:pointer;font-weight:600}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><b>버킷 건물검토</b><small>매입 검토 + 보유 관리 · MVP 검증판</small></div>
+    <div class="ctl"><span>사용자 유형</span>
+      <div class="seg" role="group" aria-label="사용자 유형">
+        <button type="button" data-persona="novice" aria-pressed="true">개인 초보 (1차)</button>
+        <button type="button" data-persona="broker" aria-pressed="false">중개인·법인 (2차)</button>
+      </div>
+    </div>
+    <div class="ctl"><label for="g_purpose">투자 목적</label>
+      <select id="g_purpose"></select>
+    </div>
+    <span class="store-pill" id="storePill">저장소 연결 중…</span>
+  </div>
+  <nav class="steps" aria-label="핵심 흐름">
+    <div class="wrap">
+      <a href="#review" data-view="review"><i>1</i>무료 검토</a>
+      <a href="#compare" data-view="compare"><i>2</i>타깃별 비교</a>
+      <a href="#order" data-view="order"><i>3</i>유료 리포트 신청</a>
+      <a href="#candidates" data-view="candidates"><i>4</i>후보 물건 비교</a>
+      <a href="#manage" data-view="manage"><i>5</i>보유 후 관리</a>
+    </div>
+  </nav>
+</header>
+
+<main class="wrap">
+  <!-- 1 REVIEW -->
+  <section class="view" id="v-review">
+    <div class="head">
+      <div class="stack" style="gap:4px"><span class="eyebrow">STEP 1 · 무료 검토</span><h2>주소와 조건을 넣으면 바로 1차 판단을 드립니다</h2></div>
+      <p class="small">예시 건물이 미리 입력되어 있습니다. 숫자를 바꾸면 결과가 즉시 다시 계산됩니다. 자동 확인 값은 MVP 단계라 주소 기반 시뮬레이션입니다.</p>
+    </div>
+    <div class="grid2">
+      <div class="stack">
+        <div class="q" id="firstQ"></div>
+        <form class="panel form" id="reviewForm" autocomplete="off">
+          <div class="field full" data-k="addr"><label for="f_addr">주소</label><input id="f_addr" placeholder="예) 서울 마포구 망원동 000-00"></div>
+          <div class="field" data-k="price"><label for="f_price">매매가</label><div class="unit"><input id="f_price" inputmode="numeric"><span>만원</span></div></div>
+          <div class="field" data-k="purpose"><label for="f_purpose">투자 목적</label><select id="f_purpose"></select></div>
+          <div class="field" data-k="land"><label for="f_land">대지면적</label><div class="unit"><input id="f_land" inputmode="decimal"><span>㎡</span></div></div>
+          <div class="field" data-k="gfa"><label for="f_gfa">연면적</label><div class="unit"><input id="f_gfa" inputmode="decimal"><span>㎡</span></div></div>
+          <div class="field" data-k="deposit"><label for="f_deposit">보증금 합계</label><div class="unit"><input id="f_deposit" inputmode="numeric"><span>만원</span></div></div>
+          <div class="field" data-k="rent"><label for="f_rent">월세 합계</label><div class="unit"><input id="f_rent" inputmode="numeric"><span>만원</span></div></div>
+          <div class="field" data-k="loan"><label for="f_loan">대출 예정액</label><div class="unit"><input id="f_loan" inputmode="numeric"><span>만원</span></div></div>
+          <div class="field" data-k="rate"><label for="f_rate">대출 금리</label><div class="unit"><input id="f_rate" inputmode="decimal"><span>%</span></div></div>
+          <div class="field" data-k="hold"><label for="f_hold">보유 기간</label><div class="unit"><input id="f_hold" inputmode="numeric"><span>년</span></div></div>
+          <div class="field" data-k="remodel"><label for="f_remodel">리모델링 계획</label>
+            <select id="f_remodel"><option value="none">없음</option><option value="partial">부분 (외관·공용부)</option><option value="full">전면 (내부 전체)</option><option value="extend">증축·용도변경</option></select></div>
+          <div class="field" data-k="budget"><label for="f_budget">리모델링 예산</label><div class="unit"><input id="f_budget" inputmode="numeric"><span>만원</span></div></div>
+          <div class="full row">
+            <button type="button" class="btn primary" id="saveCand">후보에 저장</button>
+            <button type="button" class="btn" id="goOrder">이 건물로 리포트 신청</button>
+            <button type="button" class="btn ghost sm" id="resetSample">예시 값으로</button>
+          </div>
+        </form>
+      </div>
+      <div class="stack" id="results"></div>
+    </div>
+  </section>
+
+  <!-- 2 COMPARE -->
+  <section class="view" id="v-compare" hidden>
+    <div class="head">
+      <div class="stack" style="gap:4px"><span class="eyebrow">STEP 2 · 같은 건물, 다른 사람</span><h2>타깃별로 질문·입력·결과·구매 메시지가 어떻게 달라지나</h2></div>
+      <p class="small" id="cmpBuilding"></p>
+    </div>
+    <div class="two" id="cmpFlow"></div>
+    <div class="panel stack">
+      <div class="row" style="justify-content:space-between"><h3>구매 전환 가설 비교</h3><span class="small muted">인터뷰·광고 테스트로 검증할 항목</span></div>
+      <div class="tbl-wrap"><table id="cmpTable"></table></div>
+    </div>
+    <div class="two" id="cmpReport"></div>
+    <div class="panel stack">
+      <div class="row" style="justify-content:space-between"><h3>쓰레드 콘텐츠 초안</h3><span class="small muted">타깃별 3개씩 · 복사해서 바로 게시 테스트</span></div>
+      <div class="two" id="cmpThreads"></div>
+    </div>
+    <div class="panel stack" id="insights" hidden></div>
+  </section>
+
+  <!-- 3 ORDER -->
+  <section class="view" id="v-order" hidden>
+    <div class="head">
+      <div class="stack" style="gap:4px"><span class="eyebrow">STEP 3 · 유료 검토 리포트</span><h2>건당 139,000원 검토 리포트 신청</h2></div>
+      <div class="stepper" id="stepper"></div>
+    </div>
+    <div class="grid2">
+      <div class="stack" id="orderLeft"></div>
+      <div class="stack" id="orderRight"></div>
+    </div>
+  </section>
+
+  <!-- 4 CANDIDATES -->
+  <section class="view" id="v-candidates" hidden>
+    <div class="head">
+      <div class="stack" style="gap:4px"><span class="eyebrow">STEP 4 · 후보 물건</span><h2>저장한 후보를 나란히 비교</h2></div>
+      <p class="small">별칭을 눌러 바로 수정할 수 있습니다. 비교할 물건을 최대 4개까지 체크하세요.</p>
+    </div>
+    <div class="panel stack" id="candList"></div>
+    <div class="panel stack" id="candCompare"></div>
+  </section>
+
+  <!-- 5 MANAGE -->
+  <section class="view" id="v-manage" hidden>
+    <div class="head">
+      <div class="stack" style="gap:4px"><span class="eyebrow">STEP 5 · 보유 후 관리</span><h2>자산별 기록 장부와 대출 의뢰용 엑셀</h2></div>
+      <p class="small">매입한 건물마다 계약·원리금·보증금·월세·공실·수리·견적·세금·세금계산서·감정가를 같은 형식으로 쌓아 둡니다.</p>
+    </div>
+    <div class="panel stack" id="assetBar"></div>
+    <div id="assetBody" class="stack"></div>
+  </section>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+"use strict";
+/* ---------- constants ---------- */
+const PURPOSES={rent:"임대수익",gain:"시세차익",use:"사옥·실사용",value:"리모델링 밸류업"};
+const PERSONA={novice:"개인 초보",broker:"중개인·법인"};
+const REMODEL={none:"없음",partial:"부분",full:"전면",extend:"증축·용도변경"};
+const PRICE=139000;
+const SAMPLE={addr:"서울 마포구 망원동 000-00 (예시)",price:320000,land:165,gfa:410,deposit:20000,rent:950,loan:190000,rate:4.6,purpose:"rent",hold:5,remodel:"partial",budget:15000};
+const FIELDS=["addr","price","land","gfa","deposit","rent","loan","rate","hold","remodel","budget"];
+const FIELD_LABEL={addr:"주소",price:"매매가",land:"대지면적",gfa:"연면적",deposit:"보증금",rent:"월세",loan:"대출",rate:"금리",purpose:"투자 목적",hold:"보유 기간",remodel:"리모델링 계획",budget:"리모델링 예산"};
+
+const REQ={
+ novice:{rent:["addr","price","deposit","rent","loan","rate"],gain:["addr","price","land","loan","hold"],use:["addr","price","gfa","loan","hold"],value:["addr","price","land","gfa","remodel","budget"]},
+ broker:{rent:["addr","price","land","gfa","deposit","rent","loan","rate"],gain:["addr","price","land","gfa","loan","hold"],use:["addr","price","land","gfa","loan"],value:["addr","price","land","gfa","remodel","budget","hold"]}
+};
+const FIRSTQ={
+ novice:{
+  rent:{q:"이자와 관리비를 다 내고, 매달 통장에 얼마가 남으면 만족하시나요?",why:"초보 매수자는 수익률보다 '월 순현금'으로 판단합니다. 숫자 하나로 기준을 먼저 세웁니다."},
+  gain:{q:"몇 년 뒤에, 얼마에 팔 수 있으면 성공이라고 보시나요?",why:"막연한 '오를 것 같다'를 보유 기간과 목표 매도가로 바꿔야 비용·세금 계산이 가능합니다."},
+  use:{q:"이 건물에서 몇 평을 직접 쓰고, 나머지는 임대를 주실 건가요?",why:"실사용 면적이 정해져야 기존 임차인 명도와 대출 조건이 갈립니다."},
+  value:{q:"리모델링에 쓸 수 있는 돈과 공사 기간 동안 버틸 여유는 얼마나 되나요?",why:"공사비보다 공사 중 임대료가 끊기는 기간을 초보자가 가장 많이 놓칩니다."}},
+ broker:{
+  rent:{q:"고객이 원하는 최소 수익률과 투입 가능한 자기자본은 얼마인가요?",why:"중개인은 고객 조건에 맞는 물건인지 3초 안에 걸러내야 합니다."},
+  gain:{q:"고객에게 제시할 인근 실거래·평단가 비교 근거가 준비되어 있나요?",why:"시세차익 고객은 '왜 이 가격인가'를 묻습니다. 근거 자료가 중개 신뢰를 만듭니다."},
+  use:{q:"고객 법인의 사용 면적·주차·업종 조건을 이 건물이 충족하나요?",why:"사옥 수요는 조건 불일치 하나로 계약이 무산됩니다. 체크리스트형 질문이 필요합니다."},
+  value:{q:"용적률 여유와 용도변경 가능성을 고객에게 어떤 자료로 설명하실 건가요?",why:"밸류업 제안은 인허가 리스크 고지가 핵심이라 설명 자료의 정확성이 곧 책임 범위입니다."}}
+};
+const CTA={
+ novice:{
+  rent:"계산상 남는 돈이 적습니다. 계약 전에 렌트롤과 실제 관리비가 맞는지, 놓친 비용은 없는지 전문가가 서류로 확인해 드립니다.",
+  gain:"매도 시점의 세금과 보유 중 이자를 빼면 기대 수익이 크게 줄 수 있습니다. 시나리오별 실수령액을 리포트로 받아보세요.",
+  use:"직접 쓰려면 기존 임차인 계약 만료일과 명도 가능성부터 확인해야 합니다. 계약서·등기 기준으로 점검해 드립니다.",
+  value:"공사 가능 여부는 건축물대장과 인허가 기준으로만 판단할 수 있습니다. 위반건축물·증축 여유를 확인한 리포트를 받아보세요."},
+ broker:{
+  rent:"고객에게 그대로 보낼 수 있는 1장 요약과 수익률·DSCR 표를 중개사무소 이름으로 받아보세요. 브리핑 준비 시간을 줄입니다.",
+  gain:"인근 실거래 비교와 평단가 근거를 정리한 브리핑 리포트로 가격 협상 근거를 만드세요.",
+  use:"사용 면적·주차·업종 적합성 체크 결과를 고객 법인 내부 보고용 형식으로 정리해 드립니다.",
+  value:"용적률 여유·용도변경 가능성과 리스크 고지 문구를 담아, 설명의무 대비 자료로 쓰실 수 있습니다."}
+};
+const COMPARE_ROWS=[
+ ["핵심 구매 이유",{novice:["첫 매입에서 '모르고 산' 실수를 막고 싶다","가족·배우자를 설득할 객관적 근거가 필요","중개인 말만 믿기 불안해 제3자 확인을 원함"],broker:["매수 고객 브리핑 자료 제작 시간 단축","전문적인 자료로 중개 신뢰도·성사율 상승","리스크 고지 근거를 남겨 분쟁·책임 부담 축소"]}],
+ ["불안 요소",{novice:["139,000원을 내도 결국 판단은 내 몫 아닌가","AI 계산이 실제와 다를까 봐 걱정","아직 살지 말지도 모르는데 돈을 쓰기 이르다"],broker:["고객에게 보낸 자료에 오류가 있으면 내 책임","매물마다 건당 비용이 누적되는 부담","리포트가 고객을 다른 중개사로 보낼까 우려"]}],
+ ["결제 직전 이탈 사유",{novice:["무료 결과로 충분하다고 느낌","리포트 샘플을 못 보고 내용이 막연함","언제 받는지·누가 검토하는지 불명확"],broker:["건당 가격 대신 월 구독·묶음 가격을 원함","고객 확정 전이라 결제를 미룸","세금계산서 발행 여부 확인 필요"]}],
+ ["추천 문구",{novice:["“계약서에 도장 찍기 전에, 서류로 한 번 더.”","“놓치기 쉬운 비용 7가지까지 숫자로 정리해 드립니다.”","“중개인도, 매도인도 아닌 내 편의 검토서.”"],broker:["“고객 미팅 전날 밤, 브리핑 자료를 대신 만들어 드립니다.”","“수익률·DSCR·리스크 고지를 1장에, 사무소 이름으로.”","“설명의무 대비 근거를 리포트로 남기세요.”"]}],
+ ["결과 화면 강조점",{novice:["쉬운 말 결론 한 줄 (월 순현금)","놓치기 쉬운 비용 · 미확인 사항","다음에 할 일 체크리스트"],broker:["수익률·DSCR·LTV·평단가 숫자 표","고객 설명용 한 줄 요약 복사","목적별 적합도로 고객 매칭"]}]
+];
+const REPORT={
+ novice:{name:"첫 매입 안심 리포트",sub:"처음 건물을 사는 개인을 위한 서류 기반 검토서",toc:["결론 요약 (쉬운 말, 살 만한가/조건부/재검토)","공부서류 대조: 등기부·건축물대장·토지이용계획","위반건축물·불법 용도 변경 여부","임대차 현황(렌트롤) 검증 포인트","놓치기 쉬운 비용 총정리 (취득세·수선·공실)","대출 시나리오 3가지 (금리 ±1%p)","계약 전 매도인·중개인에게 물어볼 질문","현장 방문 체크리스트"]},
+ broker:{name:"중개 브리핑 리포트",sub:"매수 고객에게 그대로 전달하는 고객 제출용 자료",toc:["고객 제출용 1장 요약 (중개사무소 명의 표기)","수익률·DSCR·LTV·평단가 비교표","인근 실거래·호가 비교 근거","용적률 여유·용도변경 가능성","리스크 고지 문구 (설명의무 대비)","대출 사전 검토용 자료 묶음","고객 유형별 설득 포인트","편집 가능한 원본 엑셀"]}
+};
+const THREADS={
+ novice:[
+  "건물 처음 사려는 분들, 매매가 32억에 월세 950만이면 괜찮아 보이죠?\n\n취득세 1.5억, 이자 연 8,700만, 관리·공실 충당까지 빼면\n매달 남는 돈은 100만 원 남짓입니다.\n\n계약 전에 이 계산 한 번은 꼭 해보세요. 주소만 넣으면 무료로 계산해 드립니다.",
+  "꼬마빌딩 매입 전 아무도 안 알려주는 것 3가지\n\n1. 건축물대장의 '위반건축물' 표기\n2. 렌트롤과 실제 임대차계약서가 다른 경우\n3. 리모델링 기간 동안 끊기는 월세\n\n세 번째는 계산기에도 안 나옵니다.",
+  "중개인이 '수익률 4%'라고 할 때 물어봐야 할 한 가지.\n\n\"그거 대출 이자 빼고도 4%예요?\"\n\n표면수익률과 내 통장에 남는 돈은 다릅니다. 내 조건으로 다시 계산해 보세요."],
+ broker:[
+  "중개사님들, 매수 고객 브리핑 자료 만드는 데 몇 시간 쓰세요?\n\n수익률표, 대출 시나리오, 리스크 고지까지\n주소 하나로 1장 요약을 뽑아 고객에게 바로 보내는 흐름을 테스트하고 있습니다.",
+  "건물 중개에서 분쟁이 나는 지점은 대부분 '설명했느냐'입니다.\n\n위반건축물, 용도 제한, 임대차 승계 조건.\n고객에게 보낸 자료에 근거가 남아 있으면 이야기가 달라집니다.",
+  "같은 건물, 다른 고객.\n\n임대수익형 고객에게는 DSCR,\n사옥 고객에게는 주차·사용면적,\n밸류업 고객에게는 용적률 여유를 먼저 보여주세요.\n\n목적별 적합도를 한 화면에서 비교해 드립니다."]
+};
+const EXIT_REASONS={
+ novice:["무료 결과로 충분해요","리포트 샘플을 먼저 보고 싶어요","가격이 부담돼요","아직 매입을 결정하지 않았어요","누가 검토하는지 모르겠어요"],
+ broker:["월 구독·묶음 가격을 원해요","고객 확정 후에 신청할게요","세금계산서 발행 여부를 확인하고 싶어요","가격이 부담돼요","자료에 사무소 이름을 넣을 수 있는지 궁금해요"]
+};
+const RTYPES=["계약","대출 원리금","보증금","월세 입금","공실","수리","견적","세금","세금계산서","감정가"];
+const RSTATUS={"계약":["신규 체결","갱신","만료 예정","해지"],"대출 원리금":["납부 완료","납부 예정","연체"],"보증금":["수령","반환","일부 반환"],"월세 입금":["입금 완료","미납","부분 입금"],"공실":["공실 시작","공실 해소"],"수리":["완료","진행 중","예정"],"견적":["접수","채택","보류"],"세금":["납부 완료","납부 예정"],"세금계산서":["발행","미발행"],"감정가":["감정 완료","탁상 감정"]};
+const TAXINV_DEFAULT={"월세 입금":"미발행","수리":"해당 없음","세금계산서":"미발행"};
+const REC_COLS=[["date","일자"],["asset","자산 별칭"],["addr","주소"],["type","구분"],["unit","호실·상대방"],["amount","금액(원)"],["status","상태"],["taxInvoice","세금계산서"],["memo","메모"]];
+const ASSET_COLS=[["alias","자산 별칭"],["addr","주소"],["purchaseDate","매입일"],["purchasePrice","매입가(원)"],["land","대지면적(㎡)"],["gfa","연면적(㎡)"],["appraisal","최근 감정가(원)"],["appraisalDate","감정일"],["lender","대출 기관"],["loanBalance","대출 잔액(원)"],["loanPaid12","최근 12개월 원리금(원)"],["depositTotal","보증금 합계(원)"],["rent12","최근 12개월 월세 입금(원)"],["rentMonthlyAvg","월평균 임대수입(원)"],["unpaid","미납 건수"],["vacancies","현재 공실 호실"],["repair12","최근 12개월 수리비(원)"],["tax12","최근 12개월 세금(원)"],["invoiceMissing","세금계산서 미발행 건수"]];
+const LOAN_PRESET={asset:["alias","addr","purchaseDate","purchasePrice","land","gfa","appraisal","appraisalDate","lender","loanBalance","depositTotal","rent12","rentMonthlyAvg","vacancies"],rec:["date","asset","type","unit","amount","status","taxInvoice"],types:["계약","대출 원리금","보증금","월세 입금","공실","감정가"]};
+
+/* ---------- utils ---------- */
+const $=s=>document.querySelector(s);
+const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const n=v=>{const x=parseFloat(String(v==null?"":v).replace(/,/g,""));return isFinite(x)?x:0};
+const comma=v=>Math.round(v).toLocaleString("ko-KR");
+function man(v){ // v in 만원
+  if(!isFinite(v))return "-";
+  const neg=v<0;v=Math.abs(Math.round(v));
+  const eok=Math.floor(v/10000),rest=v%10000;
+  let s=eok?eok+"억"+(rest?" "+comma(rest)+"만":""):comma(rest)+"만";
+  if(v===0)s="0";
+  return (neg?"-":"")+s+"원";
+}
+const pct=(x,d=1)=>isFinite(x)?(x*100).toFixed(d)+"%":"-";
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const today=()=>new Date().toISOString().slice(0,10);
+function hash(s){let h=2166136261;for(const c of String(s)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+let toastT;function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600)}
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+async function copy(text,btn){
+  try{await navigator.clipboard.writeText(text);toast("복사했습니다")}
+  catch(e){const ta=document.createElement("textarea");ta.value=text;btn.after(ta);ta.select();toast("선택된 텍스트를 복사하세요")}
+}
+
+/* ---------- state ---------- */
+const state={persona:lsGet("bk_persona","novice"),purpose:"rent",input:lsGet("bk_draft",null)||{...SAMPLE},
+  orderStep:1,orderFor:null,orderExtra:{},exitPicked:[],selAsset:null,recFilter:"전체",cmpSel:[],editingRec:null};
+state.purpose=state.input.purpose||"rent";
+
+/* ---------- storage: db (private per viewer) or local fallback ---------- */
+const store={mode:"local",docs:{},db:null,uid:null,lead:null,
+  col(){return this.db.collection("data/users/"+this.uid)},
+  async put(id,obj){this.docs[id]=obj;renderData();
+    if(this.mode==="db"){try{await this.col().doc(id).set(obj)}catch(e){toast("저장 실패: 잠시 후 다시 시도해 주세요")}}
+    else lsSet("bk_docs",this.docs)},
+  async del(id){delete this.docs[id];renderData();
+    if(this.mode==="db"){try{await this.col().doc(id).delete()}catch(e){toast("삭제 실패")}}
+    else lsSet("bk_docs",this.docs)},
+  all(kind){return Object.entries(this.docs).filter(([,d])=>d&&d.kind===kind).map(([id,d])=>({id,...d}))}
+};
+async function initStore(){
+  const pill=$("#storePill");
+  let db=null,user=null;
+  try{if(window.claude&&window.claude.use){[db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")])}}catch(e){}
+  let id=null;try{id=user?await user.id():null}catch(e){}
+  if(db&&id){
+    store.mode="db";store.db=db;store.uid=id;
+    pill.textContent="저장: 내 계정 (비공개)";
+    let got=false;const timer=setTimeout(()=>{if(!got)pill.textContent="저장소 응답 지연 · 다시 열어 주세요"},10000);
+    store.col().onSnapshot(snap=>{got=true;clearTimeout(timer);const d={};snap.docs.forEach(s=>{d[s.id]=s.data()});store.docs=d;renderData()},
+      ()=>{clearTimeout(timer);pill.textContent="저장소 오류 · 새로고침 필요"});
+    try{const s=await db.doc("leads/"+id).get();store.lead=s.exists?s.data():null}catch(e){}
+    store.ready=true;
+    try{if(await user.isOwner()){state.isOwner=true;renderInsightsShell()}}catch(e){}
+  }else{
+    store.docs=lsGet("bk_docs",{});store.lead=lsGet("bk_lead",null);store.ready=true;
+    pill.textContent="저장: 이 브라우저에만";
+    pill.title="로그인한 claude.ai 화면에서 열면 계정에 비공개로 저장됩니다";
+    renderData();
+  }
+}
+/* funnel tracking for conversion validation */
+async function track(ev,extra){
+  if(!store.ready)return;
+  const L=store.lead||{events:{},exits:[],applications:[]};
+  if(!extra&&L.events&&L.events[ev]&&L.persona===state.persona)return;
+  L.persona=state.persona;L.purpose=state.purpose;L.updatedAt=new Date().toISOString();
+  L.events=L.events||{};if(!L.events[ev])L.events[ev]=new Date().toISOString();
+  L.counts=L.counts||{};L.counts[ev]=(L.counts[ev]||0)+1;
+  if(extra&&extra.exit){L.exits=(L.exits||[]).concat([{reason:extra.exit,persona:state.persona,at:L.updatedAt}]).slice(-30)}
+  if(extra&&extra.application){L.applications=(L.applications||[]).concat([extra.application]).slice(-30)}
+  store.lead=L;
+  if(store.mode==="db"){try{await store.db.doc("leads/"+store.uid).set(L)}catch(e){}}else lsSet("bk_lead",L);
+}
+
+/* ---------- auto info (MVP simulation) ---------- */
+function autoInfo(addr){
+  const h=hash(addr||"");
+  const zones=[{n:"제2종일반주거지역",far:200,bcr:60,lp:620},{n:"제3종일반주거지역",far:250,bcr:50,lp:780},{n:"준주거지역",far:400,bcr:60,lp:1050},{n:"근린상업지역",far:600,bcr:70,lp:1250},{n:"일반상업지역",far:800,bcr:60,lp:1900}];
+  const z=zones[h%5];const year=1984+(h>>>3)%36;
+  return {zone:z.n,far:z.far,bcr:z.bcr,landPrice:z.lp+((h>>>7)%9-4)*20,year,age:2026-year,
+    use:["제2종근린생활시설","제1종근린생활시설","근린생활시설·다가구"][(h>>>11)%3],
+    road:["4m 미만 도로","6m 도로","8m 도로","12m 이상 도로"][(h>>>13)%4],
+    elevator:year>=2005?"있음":"없음(추정)",parking:((h>>>15)%5)+1};
+}
+/* ---------- calc ---------- */
+function calc(i){
+  const a=autoInfo(i.addr);
+  const price=n(i.price),land=n(i.land),gfa=n(i.gfa),dep=n(i.deposit),rent=n(i.rent),loan=n(i.loan),rate=n(i.rate)/100,hold=n(i.hold),budget=n(i.budget);
+  const tax=price*0.046,fee=price*0.009,misc=price*0.003;
+  const lossM={none:0,partial:2,full:6,extend:10}[i.remodel]||0;
+  const remodelCost=i.remodel==="none"?0:budget;
+  const rentLoss=rent*lossM;
+  const total=price+tax+fee+misc+remodelCost;
+  const equity=total-loan-dep;
+  const annual=rent*12,opex=annual*0.08,vac=annual*0.05,noi=annual-opex-vac;
+  const interest=loan*rate,cf=noi-interest;
+  const surface=price-dep>0?annual/(price-dep):0;
+  const coc=equity>0?cf/equity:0;
+  const dscr=interest>0?noi/interest:Infinity;
+  const ltv=price?loan/price:0;
+  const uplift={none:0,partial:.10,full:.25,extend:.35}[i.remodel]||0;
+  const rentAfter=rent*(1+uplift),noiAfter=rentAfter*12*0.87,cfAfter=noiAfter-interest;
+  const stressCf=noi-loan*(rate+0.01);
+  const landPy=land/3.3058,gfaPy=gfa/3.3058;
+  const ppLand=landPy?price/landPy:0;
+  const curFar=land?gfa/land*100:0;
+  const marketLand=a.landPrice*1.7; // 만원/㎡, 공시지가 대비 시세 1.7배 가정
+  const landRatio=land?(price/land)/marketLand:1;
+  const sc=[0,.02,.04].map(g=>{const exit=price*Math.pow(1+g,hold)+(uplift?rent*uplift*12/Math.max(surface,.03):0);const sale=exit*0.01;
+    const prof=exit-sale-total+(i.remodel==="none"?cf*hold:cfAfter*Math.max(hold-lossM/12,0))-rentLoss;return {g,exit,prof,roe:equity>0?prof/equity:0}});
+  return {a,price,land,gfa,dep,rent,loan,rate,hold,budget,tax,fee,misc,remodelCost,rentLoss,lossM,total,equity,annual,opex,vac,noi,interest,cf,surface,coc,dscr,ltv,uplift,rentAfter,cfAfter,stressCf,landPy,gfaPy,ppLand,curFar,landRatio,sc};
+}
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+function fitScores(i,c){
+  const s={};
+  s.rent=Math.round(clamp(10+clamp((c.surface-.02)/.03*55,0,55)+clamp((c.dscr-1)/1*30,0,30)-(c.a.age>30?8:0)+(c.dep/c.price>.15?-5:0),0,100));
+  s.gain=Math.round(clamp((c.landRatio<=.9?45:c.landRatio<=1.05?35:c.landRatio<=1.3?18:6)+(c.hold>=5?25:c.hold>=3?14:4)+(c.ltv<=.5?20:c.ltv<=.65?12:4)+(/상업|준주거/.test(c.a.zone)?10:0),0,100));
+  s.use=Math.round(clamp(10+clamp(c.gfa/500*30,0,30)+(c.total? (c.equity/c.total>=.4?30:c.equity/c.total>=.25?18:8):0)+(c.a.age<25?18:8)+(c.a.elevator==="있음"?10:0)+(c.a.parking>=3?5:0),0,100));
+  const head=c.a.far-c.curFar,br=c.price?c.budget/c.price:0;
+  s.value=Math.round(clamp(10+(c.a.age>=25?28:c.a.age>=15?18:8)+(head>50?25:head>0?14:4)+(i.remodel!=="none"&&br>=.03&&br<=.15?25:i.remodel!=="none"?12:4)+(c.dscr>=1?10:0),0,100));
+  return s;
+}
+const grade=v=>v>=70?["적합","good"]:v>=50?["조건부","expert"]:["재검토","risk"];
+function risks(i,c){
+  const r=[];
+  if(c.surface<.035)r.push(["높음",`표면수익률 ${pct(c.surface)}로 낮아, 대출 이자를 내면 남는 현금이 연 ${man(c.cf)} 수준입니다.`]);
+  if(isFinite(c.dscr)&&c.dscr<1.2)r.push(["높음",`이자보상비율(DSCR) ${c.dscr.toFixed(2)}배. 금리가 1%p 오르면 연 현금흐름이 ${man(c.stressCf)}가 됩니다.`]);
+  if(c.ltv>.65)r.push(["중간",`LTV ${pct(c.ltv,0)}. 실제 한도는 감정가 기준이라 매매가보다 낮게 나올 수 있습니다.`]);
+  if(c.a.age>=30)r.push(["중간",`사용승인 ${c.a.year}년(약 ${c.a.age}년 경과). 배관·방수·석면 조사 등 수선비가 커질 수 있습니다.`]);
+  if((i.remodel==="extend")&&c.a.far-c.curFar<=0)r.push(["높음",`현재 용적률 약 ${Math.round(c.curFar)}%로 허용 ${c.a.far}%를 이미 채워 증축 여유가 없을 수 있습니다.`]);
+  if(c.lossM)r.push(["중간",`리모델링 기간 약 ${c.lossM}개월 동안 월세 ${man(c.rentLoss)}가 줄어드는 것을 감안해야 합니다.`]);
+  if(c.price&&c.dep/c.price>.15)r.push(["중간",`보증금이 매매가의 ${pct(c.dep/c.price,0)}. 임차인 퇴거 시 반환 자금이 필요합니다.`]);
+  if(c.hold&&c.hold<2)r.push(["높음","보유 2년 미만에 팔면 개인 기준 양도세율이 40~50%로 높아집니다."]);
+  if(c.landRatio>1.3)r.push(["중간","대지 평단가가 지역 추정 시세보다 높은 편입니다. 인근 실거래 비교가 필요합니다."]);
+  if(c.equity>0&&c.total&&c.equity/c.total>.5&&state.purpose==="rent")r.push(["낮음",`자기자본 ${man(c.equity)}이 묶입니다. 같은 돈의 예금 이자와 비교해 보세요.`]);
+  if(!r.length)r.push(["낮음","입력값 기준으로 큰 숫자 리스크는 보이지 않습니다. 서류 확인이 남아 있습니다."]);
+  return r;
+}
+function missing(i){return REQ[state.persona][state.purpose].filter(k=>!String(i[k]==null?"":i[k]).trim()||(k!=="addr"&&k!=="remodel"&&!n(i[k])))}
+
+/* ---------- review ---------- */
+const purposeOpts=()=>Object.entries(PURPOSES).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
+$("#g_purpose").innerHTML=purposeOpts();$("#f_purpose").innerHTML=purposeOpts();
+function fillForm(){FIELDS.forEach(k=>{$("#f_"+k).value=state.input[k]==null?"":state.input[k]});$("#f_purpose").value=state.purpose;$("#g_purpose").value=state.purpose}
+function readForm(){FIELDS.forEach(k=>state.input[k]=$("#f_"+k).value);state.input.purpose=state.purpose;lsSet("bk_draft",state.input)}
+
+function renderFirstQ(){
+  const f=FIRSTQ[state.persona][state.purpose];
+  $("#firstQ").innerHTML=`<div class="row" style="justify-content:space-between"><span class="who">${esc(PERSONA[state.persona])} · ${esc(PURPOSES[state.purpose])} · 첫 질문</span><span class="tag user">답변은 후보에 함께 저장</span></div>
+  <blockquote>${esc(f.q)}</blockquote><p class="small muted">${esc(f.why)}</p>
+  <div class="field"><label for="f_goal">내 답변</label><input id="f_goal" value="${esc(state.input.goal||"")}" placeholder="${state.persona==="novice"?"예) 월 200만 원 이상":"예) 수익률 4% 이상, 자기자본 15억 이내"}"></div>`;
+  $("#f_goal").addEventListener("input",e=>{state.input.goal=e.target.value;lsSet("bk_draft",state.input)});
+}
+function markRequired(){
+  const req=REQ[state.persona][state.purpose],miss=missing(state.input);
+  document.querySelectorAll("#reviewForm .field").forEach(el=>{
+    const k=el.dataset.k;const lab=el.querySelector("label");
+    lab.querySelectorAll(".tag").forEach(t=>t.remove());
+    const isReq=req.includes(k)||k==="purpose";
+    el.classList.toggle("req",isReq);el.classList.toggle("missing",miss.includes(k));
+    lab.insertAdjacentHTML("beforeend",isReq?`<span class="tag req">${esc(PERSONA[state.persona].split(" ")[0])} 필수</span>`:`<span class="tag opt">선택</span>`);
+  });
+}
+function renderResults(){
+  const i=state.input,c=calc(i),fs=fitScores(i,c),miss=missing(i),P=state.persona;
+  const sel=fs[state.purpose],[gl,gc]=grade(sel);
+  const R=risks(i,c);
+  const unknown=[];
+  miss.forEach(k=>unknown.push(`${FIELD_LABEL[k]} 미입력 · ${PURPOSES[state.purpose]} 판단 정확도가 떨어집니다`));
+  unknown.push("임대차계약서 원본과 렌트롤 일치 여부","실제 관리비 수입·지출 내역","근저당·가압류 등 등기부 권리관계","주차대수와 용도별 법정 주차 기준");
+  if(i.remodel!=="none")unknown.push("공사 범위별 실제 견적 (최소 2곳)");
+  const next=P==="novice"?[
+    ["오늘","인터넷등기소에서 등기부등본 열람 (건당 700원)"],["오늘","정부24에서 건축물대장 열람 · '위반건축물' 표기 확인"],
+    ["이번 주","중개인에게 렌트롤·임대차계약서 사본 요청"],["이번 주","은행 2곳 이상 대출 사전 한도 문의"],["계약 전","현장 방문: 누수·외벽 균열·공실 호실 확인"]]:[
+    ["오늘","고객 설명용 한 줄 요약을 복사해 고객에게 전달"],["오늘","매도인 측에 렌트롤·관리비 내역 요청"],
+    ["이번 주","인근 6개월 실거래 3건 이상 비교표 준비"],["이번 주","제휴 은행에 감정가·한도 사전 조회 의뢰"],["브리핑 전","리스크 고지 항목을 브리핑 자료에 반영"]];
+  const headline=P==="novice"
+    ?(c.cf>=0?`이 조건이면 이자·운영비를 내고 <span class="num">매달 약 ${esc(man(c.cf/12))}</span>이 남습니다.`:`이 조건이면 <span class="num">매달 약 ${esc(man(-c.cf/12))}</span>씩 모자랍니다.`)
+    :`표면 <span class="num">${pct(c.surface)}</span> · 자기자본수익률 <span class="num">${pct(c.coc)}</span> · DSCR <span class="num">${isFinite(c.dscr)?c.dscr.toFixed(2):"-"}</span>`;
+  const sub=P==="novice"?`세전 기준입니다. 처음 들어가는 돈은 대출·보증금을 빼고 약 ${man(c.equity)}입니다.`:`매매가 ${man(c.price)}, 대지 평단가 ${man(c.ppLand)}, LTV ${pct(c.ltv,0)}. 고객 목적: ${PURPOSES[state.purpose]}.`;
+  const brokerLine=`${i.addr||"해당 물건"} · 매매가 ${man(c.price)} · 표면수익률 ${pct(c.surface)} · 자기자본 ${man(c.equity)} 기준 연 현금흐름 ${man(c.cf)} · ${PURPOSES[state.purpose]} 적합도 ${sel}점(${gl}). 위반건축물·권리관계는 서류 확인 예정입니다.`;
+  const costs=[["취득세 (상업용 4.6%)",c.tax,"자동 계산"],["중개보수 (최대 0.9%, 협의)",c.fee,"자동 계산"],["법무사·등기 등 (약 0.3% 가정)",c.misc,"가정"],["리모델링 예산",c.remodelCost,"사용자 입력"],["리모델링 중 임대 손실 ("+c.lossM+"개월)",c.rentLoss,"가정"],["연간 대출이자",c.interest,"사용자 입력 기반"],["연간 운영비 (임대료 8% 가정)",c.opex,"가정"],["연간 공실 충당 (5% 가정)",c.vac,"가정"]];
+  $("#results").innerHTML=`
+  <div class="panel stack">
+    <div class="verdict">
+      <div class="stack" style="gap:6px"><span class="eyebrow">${esc(PERSONA[P])}용 결과 · ${esc(PURPOSES[state.purpose])}</span><p class="big">${headline}</p><p class="small muted">${esc(sub)}</p></div>
+      <div style="text-align:right"><div class="num" style="font-size:2rem;font-weight:600;line-height:1">${sel}</div><span class="tag ${gc}">${gl}</span></div>
+    </div>
+    ${P==="broker"?`<div class="mock"><span class="eyebrow">고객 설명용 한 줄</span><span>${esc(brokerLine)}</span><div><button class="btn sm" type="button" id="copyLine">복사</button></div></div>`:""}
+    <div class="kpis">
+      ${kpi("표면수익률",pct(c.surface),"연 월세 ÷ (매매가−보증금)")}
+      ${kpi("연 현금흐름",man(c.cf),"이자·운영비·공실 차감")}
+      ${kpi("자기자본",man(c.equity),"취득비용 포함")}
+      ${kpi("자기자본수익률",pct(c.coc),"연 현금흐름 ÷ 자기자본")}
+      ${kpi("금리 +1%p 시",man(c.stressCf),"연 현금흐름")}
+      ${kpi("대지 평단가",man(c.ppLand),c.landPy?c.landPy.toFixed(1)+"평":"대지면적 필요")}
+    </div>
+  </div>
+  <div class="panel stack"><h3>정보 출처 구분</h3>
+    <div class="src3">
+      <div class="src a"><h4><span class="tag auto">자동 확인</span></h4><dl>
+        <dt>용도지역</dt><dd>${esc(c.a.zone)}</dd><dt>건폐율/용적률</dt><dd class="num">${c.a.bcr}% / ${c.a.far}%</dd><dt>사용승인</dt><dd class="num">${c.a.year}년</dd>
+        <dt>주용도</dt><dd>${esc(c.a.use)}</dd><dt>공시지가</dt><dd class="num">${comma(c.a.landPrice)}만/㎡</dd><dt>접도</dt><dd>${esc(c.a.road)}</dd><dt>승강기</dt><dd>${esc(c.a.elevator)}</dd></dl>
+        <p class="small muted" style="margin-top:6px">MVP: 주소 기반 시뮬레이션 값. 정식판은 건축물대장·토지이용계획 연동.</p></div>
+      <div class="src u"><h4><span class="tag user">사용자 입력</span></h4><dl>
+        <dt>매매가</dt><dd class="num">${esc(man(c.price))}</dd><dt>대지/연면적</dt><dd class="num">${c.land||"-"} / ${c.gfa||"-"}㎡</dd><dt>보증금/월세</dt><dd class="num">${esc(man(c.dep))} / ${esc(man(c.rent))}</dd>
+        <dt>대출/금리</dt><dd class="num">${esc(man(c.loan))} / ${n(i.rate)}%</dd><dt>보유 기간</dt><dd class="num">${c.hold||"-"}년</dd><dt>리모델링</dt><dd>${esc(REMODEL[i.remodel]||"-")} ${i.remodel!=="none"?esc(man(c.budget)):""}</dd></dl></div>
+      <div class="src e"><h4><span class="tag expert">전문가 확인 필요</span></h4><ul>
+        <li>위반건축물·불법 용도변경</li><li>등기부 권리관계 (근저당·가압류)</li><li>임대차 승계 조건·명도 가능성</li><li>실제 대출 한도 (감정가 기준)</li>
+        ${i.remodel!=="none"?"<li>리모델링 인허가·주차 기준</li>":""}<li>개인/법인 매입 세금 비교</li></ul></div>
+    </div>
+  </div>
+  <div class="panel stack"><div class="row" style="justify-content:space-between"><h3>목적별 적합도</h3><span class="small muted">선택 목적 강조 · 100점 만점</span></div>
+    <div class="fit">${Object.entries(fs).map(([k,v])=>`<div class="fitrow ${k===state.purpose?"sel":""}"><span>${esc(PURPOSES[k])}</span><div class="bar"><i style="width:${v}%"></i></div><span class="num" style="text-align:right">${v} <span class="tag ${grade(v)[1]}">${grade(v)[0]}</span></span></div>`).join("")}</div>
+  </div>
+  <div class="panel stack"><h3>예상 수익성 · 보유 ${c.hold||0}년 시나리오</h3>
+    <div class="tbl-wrap"><table><thead><tr><th>연 시세 상승</th><th class="r">예상 매도가</th><th class="r">누적 세전 손익</th><th class="r">자기자본 대비</th></tr></thead><tbody>
+    ${c.sc.map(s=>`<tr><td>${s.g*100}%</td><td class="r num">${esc(man(s.exit))}</td><td class="r num" style="color:${s.prof<0?"var(--risk)":"var(--good)"}">${esc(man(s.prof))}</td><td class="r num">${pct(s.roe)}</td></tr>`).join("")}
+    </tbody></table></div>
+    ${c.uplift?`<p class="small muted">리모델링 후 월세 ${pct(c.uplift,0)} 상승 가정 시 월세 ${man(c.rentAfter)}, 연 현금흐름 ${man(c.cfAfter)}. 양도세·매도 시 중개보수 외 세금은 제외.</p>`:`<p class="small muted">양도세 제외, 매도 비용 1% 가정.</p>`}
+  </div>
+  <div class="two">
+    <div class="panel stack"><h3>주요 비용</h3><div class="tbl-wrap"><table><tbody>${costs.map(([l,v,s])=>`<tr><td>${esc(l)}<br><span class="small muted">${esc(s)}</span></td><td class="r num">${esc(man(v))}</td></tr>`).join("")}</tbody></table></div></div>
+    <div class="panel stack"><h3>리스크</h3><ul class="list">${R.map(([lv,t])=>`<li><span class="tag ${lv==="높음"?"risk":lv==="중간"?"expert":"good"}">${lv}</span><span>${esc(t)}</span></li>`).join("")}</ul></div>
+  </div>
+  <div class="two">
+    <div class="panel stack"><h3>미확인 사항</h3><ul class="list">${unknown.map(t=>`<li><span class="tag opt">미확인</span><span>${esc(t)}</span></li>`).join("")}</ul></div>
+    <div class="panel stack"><h3>다음 확인 행동</h3><ul class="list">${next.map(([w,t])=>`<li><span class="tag user">${esc(w)}</span><span>${esc(t)}</span></li>`).join("")}</ul></div>
+  </div>
+  <div class="cta"><span class="eyebrow" style="color:inherit;opacity:.7">${esc(REPORT[P].name)}</span>
+    <p style="color:inherit;font-size:1.02rem;font-weight:500">${esc(CTA[P][state.purpose])}</p>
+    <div class="row"><span class="price">139,000원</span><span class="small" style="opacity:.75">건당 · 무료 결과의 '전문가 확인 필요' 항목을 서류 기준으로 검토</span></div>
+    <button class="btn primary" type="button" id="ctaOrder">리포트 구성 보고 신청하기</button></div>`;
+  const cl=$("#copyLine");if(cl)cl.onclick=()=>copy(brokerLine,cl);
+  $("#ctaOrder").onclick=()=>startOrder();
+}
+function kpi(l,v,s){return `<div class="kpi"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`}
+let rT;function onFormInput(){readForm();clearTimeout(rT);rT=setTimeout(()=>{markRequired();renderResults()},120)}
+$("#reviewForm").addEventListener("input",e=>{if(e.target.id==="f_purpose"){setPurpose(e.target.value);return}onFormInput()});
+$("#resetSample").onclick=()=>{state.input={...SAMPLE};state.purpose=SAMPLE.purpose;fillForm();renderAll();toast("예시 값으로 되돌렸습니다")};
+$("#saveCand").onclick=()=>{
+  readForm();const i=state.input;if(!i.addr||!n(i.price)){toast("주소와 매매가를 입력해 주세요");return}
+  const dong=(i.addr.match(/(\S+[동로가리])\s/)||[])[1]||i.addr.split(" ").slice(-2,-1)[0]||"후보";
+  const id="cand_"+uid();
+  store.put(id,{kind:"candidate",alias:`${dong} ${man(n(i.price)).replace("원","")}`,input:{...i},persona:state.persona,status:"검토중",createdAt:new Date().toISOString()});
+  track("saved");toast("후보에 저장했습니다 · 4단계에서 비교할 수 있어요");
+};
+$("#goOrder").onclick=()=>startOrder();
+
+/* ---------- compare ---------- */
+function renderCompare(){
+  const i=state.input,c=calc(i),fs=fitScores(i,c);
+  $("#cmpBuilding").innerHTML=`기준 건물: <b>${esc(i.addr||"-")}</b> · ${esc(man(c.price))} · 목적 <b>${esc(PURPOSES[state.purpose])}</b> (상단에서 목적을 바꾸면 비교 내용이 바뀝니다)`;
+  $("#cmpFlow").innerHTML=["novice","broker"].map(p=>{
+    const req=REQ[p][state.purpose];
+    const head=p==="novice"?(c.cf>=0?`매달 약 ${man(c.cf/12)}이 남습니다`:`매달 약 ${man(-c.cf/12)}씩 모자랍니다`):`표면 ${pct(c.surface)} · CoC ${pct(c.coc)} · DSCR ${isFinite(c.dscr)?c.dscr.toFixed(2):"-"}`;
+    return `<div class="persona-col ${p===state.persona?"on":""}">
+      <h3>${esc(PERSONA[p])} <span class="tag ${p==="novice"?"user":"auto"}">${p==="novice"?"1차 타깃":"2차 타깃"}</span></h3>
+      <div class="cell"><span class="k">첫 질문</span><b>${esc(FIRSTQ[p][state.purpose].q)}</b><span class="small muted">${esc(FIRSTQ[p][state.purpose].why)}</span></div>
+      <div class="cell"><span class="k">필요한 입력값 (${req.length}개)</span><div class="chips">${req.map(k=>`<span class="tag req">${esc(FIELD_LABEL[k])}</span>`).join("")}${FIELDS.filter(k=>!req.includes(k)).map(k=>`<span class="tag opt">${esc(FIELD_LABEL[k])}</span>`).join("")}</div></div>
+      <div class="cell"><span class="k">결과 화면 첫 줄</span><div class="mock"><b>${esc(head)}</b><span class="small muted">${p==="novice"?"쉬운 말 결론 → 놓치기 쉬운 비용 → 할 일 체크리스트":"숫자 표 → 고객 설명용 한 줄 복사 → 목적별 적합도 "+fs[state.purpose]+"점"}</span></div></div>
+      <div class="cell"><span class="k">구매를 자극하는 메시지</span><p>${esc(CTA[p][state.purpose])}</p></div>
+    </div>`}).join("");
+  $("#cmpTable").innerHTML=`<thead><tr><th>항목</th><th>${PERSONA.novice} (1차)</th><th>${PERSONA.broker} (2차)</th></tr></thead><tbody>${COMPARE_ROWS.map(([k,v])=>`<tr><th scope="row" style="white-space:normal">${esc(k)}</th>${["novice","broker"].map(p=>`<td style="${p===state.persona?"background:var(--accent-soft)":""}"><ul style="margin:0;padding-left:16px">${v[p].map(t=>`<li>${esc(t)}</li>`).join("")}</ul></td>`).join("")}</tr>`).join("")}</tbody>`;
+  $("#cmpReport").innerHTML=["novice","broker"].map(p=>`<div class="persona-col ${p===state.persona?"on":""}"><span class="eyebrow">리포트 구성 차이 · 139,000원</span><h3>${esc(REPORT[p].name)}</h3><p class="small muted">${esc(REPORT[p].sub)}</p><ol class="toc">${REPORT[p].toc.map(t=>`<li>${esc(t)}</li>`).join("")}</ol></div>`).join("");
+  $("#cmpThreads").innerHTML=["novice","broker"].map(p=>`<div class="stack"><h4>${esc(PERSONA[p])}</h4>${THREADS[p].map((t,ix)=>`<div class="thread"><span>${esc(t)}</span><div class="row"><span class="small muted">${t.length}자</span><button class="btn sm" type="button" data-thread="${p}:${ix}">복사</button></div></div>`).join("")}</div>`).join("");
+  document.querySelectorAll("[data-thread]").forEach(b=>b.onclick=()=>{const [p,ix]=b.dataset.thread.split(":");copy(THREADS[p][ix],b)});
+}
+function renderInsightsShell(){
+  const el=$("#insights");el.hidden=false;
+  el.innerHTML=`<div class="row" style="justify-content:space-between"><h3>검증 지표 (소유자에게만 보임)</h3><button class="btn sm" type="button" id="loadIns">방문자 데이터 불러오기</button></div><div id="insBody" class="small muted">버튼을 누르면 이 페이지를 쓴 사람들의 단계별 도달·이탈 사유·신청 내역을 집계합니다.</div>`;
+  $("#loadIns").onclick=loadInsights;
+}
+async function loadInsights(){
+  const b=$("#insBody");b.textContent="불러오는 중…";
+  try{
+    const snap=await store.db.collection("leads").get();const rows=snap.docs.map(d=>d.data()||{});
+    const steps=["review","compare","checkout","applied"],lab={review:"무료 결과 확인",compare:"타깃 비교 열람",checkout:"신청 화면 진입",applied:"신청 완료"};
+    const by={novice:{},broker:{}};const exits={};let apps=[];
+    rows.forEach(r=>{const p=r.persona==="broker"?"broker":"novice";steps.forEach(s=>{if(r.events&&r.events[s])by[p][s]=(by[p][s]||0)+1});(r.exits||[]).forEach(x=>exits[x.reason]=(exits[x.reason]||0)+1);apps=apps.concat(r.applications||[])});
+    b.innerHTML=`<div class="tbl-wrap"><table><thead><tr><th>단계</th><th class="r">개인 초보</th><th class="r">중개인·법인</th></tr></thead><tbody>${steps.map(s=>`<tr><td>${lab[s]}</td><td class="r num">${by.novice[s]||0}</td><td class="r num">${by.broker[s]||0}</td></tr>`).join("")}</tbody></table></div>
+    <h4 style="margin-top:12px">결제 직전 이탈 사유</h4><ul>${Object.entries(exits).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<li>${esc(k)} · <span class="num">${v}</span></li>`).join("")||"<li>아직 없음</li>"}</ul>
+    <h4>신청 ${apps.length}건</h4><ul>${apps.slice(-10).reverse().map(a=>`<li>${esc(a.at?.slice(0,10))} · ${esc(PERSONA[a.persona]||"")} · ${esc(a.addr)} · ${esc(a.name)} ${esc(a.contact)}</li>`).join("")}</ul>`;
+  }catch(e){b.textContent="불러오지 못했습니다. 잠시 후 다시 눌러 주세요."}
+}
+
+/* ---------- order ---------- */
+function startOrder(cand){
+  if(cand){state.orderFor={...cand.input,alias:cand.alias}}else{readForm();state.orderFor={...state.input}}
+  state.orderStep=1;state.exitPicked=[];location.hash="#order";track("checkout_view");
+}
+function renderOrder(){
+  const P=state.persona,o=state.orderFor||{...state.input},c=calc(o),R=REPORT[P],s=state.orderStep;
+  $("#stepper").innerHTML=["물건 확인","리포트 구성","신청 정보","접수 완료"].map((t,ix)=>`<span class="${ix+1===s?"on":ix+1<s?"done":""}">${ix+1}. ${t}</span>`).join("");
+  const right=`<div class="panel stack"><span class="eyebrow">${esc(PERSONA[P])} 기준 구성</span><h3>${esc(R.name)}</h3><p class="small muted">${esc(R.sub)}</p><ol class="toc">${R.toc.map(t=>`<li>${esc(t)}</li>`).join("")}</ol>
+    <div class="mock"><span class="eyebrow">무료 vs 유료</span><span>무료: 입력값 기반 자동 계산과 1차 판단</span><span>유료: '전문가 확인 필요' ${calc(o).a?6:6}개 항목을 실제 서류로 확인하고 결론을 냅니다</span></div></div>
+    <div class="panel stack"><h4>${P==="novice"?"이런 분께 필요합니다":"이런 상황에 쓰세요"}</h4><ul class="list">${COMPARE_ROWS[0][1][P].map(t=>`<li><span class="tag good">이유</span><span>${esc(t)}</span></li>`).join("")}</ul></div>`;
+  let left="";
+  if(s===1){
+    left=`<div class="panel stack"><h3>검토할 물건</h3><div class="mock"><b>${esc(o.alias||o.addr||"-")}</b><span>${esc(o.addr||"")}</span>
+      <span class="num">매매가 ${esc(man(c.price))} · 보증금 ${esc(man(c.dep))} · 월세 ${esc(man(c.rent))}</span><span>목적: ${esc(PURPOSES[o.purpose||state.purpose])} · 보유 ${esc(o.hold||"-")}년 · 리모델링 ${esc(REMODEL[o.remodel]||"-")}</span></div>
+      <p class="small muted">다른 물건으로 신청하려면 4단계 후보 목록에서 '리포트 신청'을 누르세요.</p>
+      <div class="row"><button class="btn primary" type="button" data-step="2">이 물건으로 진행</button><a class="btn ghost" href="#review">조건 수정</a></div></div>`;
+  }else if(s===2){
+    const ex=state.orderExtra;
+    left=`<div class="panel stack"><h3>추가로 확인받고 싶은 것</h3><p class="small muted">선택한 항목을 리포트에서 우선 다룹니다.</p>
+      <div class="chips" id="focusChips">${(P==="novice"?["위반건축물","대출 한도","세금(개인/법인)","리모델링 가능 범위","임차인 명도","적정 매매가"]:["고객 제출용 요약","실거래 비교","용도변경 가능성","리스크 고지 문구","대출 사전 검토","사무소 명의 표기"]).map(t=>`<button type="button" class="chip" aria-pressed="${(ex.focus||[]).includes(t)}">${esc(t)}</button>`).join("")}</div>
+      <div class="field"><label for="o_memo">검토자에게 남길 메모</label><textarea id="o_memo" placeholder="${P==="novice"?"예) 1층 카페 임차인 계약 만료가 언제인지 궁금합니다":"예) 고객은 병원 개원 목적, 엘리베이터 필수"}">${esc(ex.memo||"")}</textarea></div>
+      <div class="row"><button class="btn primary" type="button" data-step="3">다음</button><button class="btn ghost" type="button" data-step="1">이전</button></div></div>`;
+  }else if(s===3){
+    const ex=state.orderExtra;
+    left=`<div class="panel stack"><h3>신청 정보</h3>
+      <div class="form">
+        <div class="field"><label for="o_name">${P==="broker"?"담당자 / 사무소명":"이름"}</label><input id="o_name" value="${esc(ex.name||"")}"></div>
+        <div class="field"><label for="o_contact">연락처 (전화 또는 이메일)</label><input id="o_contact" value="${esc(ex.contact||"")}"></div>
+        ${P==="broker"?`<div class="field full"><label for="o_biz">세금계산서 발행</label><select id="o_biz"><option value="필요" ${ex.biz==="필요"?"selected":""}>필요 (사업자등록번호 별도 안내)</option><option value="불필요" ${ex.biz==="불필요"?"selected":""}>불필요</option></select></div>`:""}
+      </div>
+      <div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:12px"><span>${esc(R.name)} 1건</span><span class="num" style="font-size:1.3rem;font-weight:600">139,000원</span></div>
+      <p class="notice">검증용 화면입니다. 실제 결제는 일어나지 않으며, 신청 의사와 연락처만 접수됩니다. 결제 안내는 접수 후 따로 드립니다.</p>
+      <div class="row"><button class="btn primary" type="button" id="payBtn">139,000원 신청하기</button><button class="btn ghost" type="button" id="notNow">지금은 안 할래요</button><button class="btn ghost sm" type="button" data-step="2">이전</button></div>
+      <div id="exitBox" hidden class="stack"><h4>결제하지 않는 이유를 알려주세요 (복수 선택)</h4>
+        <div class="chips" id="exitChips">${EXIT_REASONS[P].map(t=>`<button type="button" class="chip" aria-pressed="${state.exitPicked.includes(t)}">${esc(t)}</button>`).join("")}</div>
+        <div class="row"><button class="btn sm" type="button" id="exitSend">의견 보내기</button></div></div>
+    </div>`;
+  }else{
+    left=`<div class="panel stack"><span class="tag good" style="justify-self:start">접수 완료</span><h3>${esc(R.name)} 신청을 받았습니다</h3>
+      <p>${esc(state.orderExtra.name||"")}님, 입력하신 연락처로 결제·진행 일정을 안내드립니다.</p>
+      <div class="mock"><b>${esc(state.orderFor?.alias||state.orderFor?.addr||"")}</b><span>우선 검토: ${esc((state.orderExtra.focus||[]).join(", ")||"기본 구성")}</span></div>
+      <p class="small muted">매입이 확정되면 5단계 '보유 후 관리'에서 이 건물의 계약·월세·대출 기록을 이어서 관리할 수 있습니다.</p>
+      <div class="row"><a class="btn primary" href="#candidates">후보 목록 보기</a><a class="btn" href="#review">다른 건물 검토</a></div></div>`;
+  }
+  $("#orderLeft").innerHTML=left;$("#orderRight").innerHTML=right;
+  document.querySelectorAll("#orderLeft [data-step]").forEach(b=>b.onclick=()=>{saveOrderExtra();state.orderStep=+b.dataset.step;if(state.orderStep===3)track("checkout");renderOrder()});
+  const fc=$("#focusChips");if(fc)fc.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{const t=b.textContent;const f=state.orderExtra.focus||[];state.orderExtra.focus=f.includes(t)?f.filter(x=>x!==t):f.concat(t);b.setAttribute("aria-pressed",state.orderExtra.focus.includes(t))});
+  const pay=$("#payBtn");if(pay)pay.onclick=submitOrder;
+  const nn=$("#notNow");if(nn)nn.onclick=()=>{$("#exitBox").hidden=false;track("exit_open")};
+  const ec=$("#exitChips");if(ec)ec.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{const t=b.textContent;state.exitPicked=state.exitPicked.includes(t)?state.exitPicked.filter(x=>x!==t):state.exitPicked.concat(t);b.setAttribute("aria-pressed",state.exitPicked.includes(t))});
+  const es=$("#exitSend");if(es)es.onclick=async()=>{if(!state.exitPicked.length){toast("이유를 하나 이상 골라 주세요");return}for(const r of state.exitPicked)await track("exit",{exit:r});toast("의견 감사합니다. 개선에 반영하겠습니다");$("#exitBox").hidden=true};
+}
+function saveOrderExtra(){const ex=state.orderExtra;["memo","name","contact","biz"].forEach(k=>{const el=$("#o_"+k);if(el)ex[k]=el.value})}
+async function submitOrder(){
+  saveOrderExtra();const ex=state.orderExtra;
+  if(!ex.name||!ex.contact){toast("이름과 연락처를 입력해 주세요");return}
+  const o=state.orderFor||state.input;
+  const app={at:new Date().toISOString(),persona:state.persona,report:REPORT[state.persona].name,price:PRICE,addr:o.addr,purpose:o.purpose||state.purpose,focus:ex.focus||[],memo:ex.memo||"",name:ex.name,contact:ex.contact,biz:ex.biz||""};
+  await track("applied",{application:app});
+  store.put("order_"+uid(),{kind:"order",...app});
+  state.orderStep=4;renderOrder();
+}
+
+/* ---------- candidates ---------- */
+function loadExamples(){
+  const ex=[
+    {alias:"망원 코너 근생",input:{...SAMPLE}},
+    {alias:"성수 이면 4층",input:{addr:"서울 성동구 성수동2가 000-0 (예시)",price:480000,land:198,gfa:620,deposit:30000,rent:1650,loan:300000,rate:4.4,purpose:"value",hold:7,remodel:"full",budget:45000,goal:""}},
+    {alias:"수원 역세권 상가주택",input:{addr:"경기 수원시 팔달구 매산로 000 (예시)",price:145000,land:132,gfa:330,deposit:15000,rent:560,loan:85000,rate:4.8,purpose:"rent",hold:10,remodel:"none",budget:0,goal:""}}];
+  ex.forEach(e=>store.put("cand_"+uid(),{kind:"candidate",alias:e.alias+" (예시)",input:e.input,persona:state.persona,status:"검토중",example:true,createdAt:new Date().toISOString()}));
+  toast("예시 후보 3개를 추가했습니다");
+}
+function renderCandidates(){
+  const list=store.all("candidate").sort((a,b)=>(a.createdAt||"").localeCompare(b.createdAt||""));
+  const el=$("#candList");
+  if(!list.length){el.innerHTML=`<div class="empty"><b>아직 저장한 후보가 없습니다</b><span class="small">1단계에서 '후보에 저장'을 누르거나, 예시 후보로 비교 화면을 먼저 확인해 보세요.</span><div class="row"><a class="btn primary" href="#review">건물 검토하러 가기</a><button class="btn" type="button" id="loadEx">예시 후보 3개 불러오기</button></div></div>`;
+    $("#loadEx").onclick=loadExamples;$("#candCompare").hidden=true;return}
+  state.cmpSel=state.cmpSel.filter(id=>list.some(c=>c.id===id));
+  if(!state.cmpSel.length)state.cmpSel=list.slice(0,4).map(c=>c.id);
+  el.innerHTML=`<div class="row" style="justify-content:space-between"><h3>후보 ${list.length}개</h3><button class="btn sm ghost" type="button" id="loadEx">예시 추가</button></div>
+  <div class="tbl-wrap"><table><thead><tr><th>비교</th><th>별칭 (눌러서 수정)</th><th>주소</th><th class="r">매매가</th><th>목적</th><th>상태</th><th></th></tr></thead><tbody>
+  ${list.map(cd=>`<tr><td><input type="checkbox" data-sel="${esc(cd.id)}" ${state.cmpSel.includes(cd.id)?"checked":""} aria-label="비교 선택"></td>
+    <td><input class="alias" data-alias="${esc(cd.id)}" value="${esc(cd.alias)}" aria-label="별칭"></td><td class="small">${esc(cd.input?.addr)}</td>
+    <td class="r num">${esc(man(n(cd.input?.price)))}</td><td>${esc(PURPOSES[cd.input?.purpose]||"-")}</td>
+    <td><span class="tag ${cd.status==="보유"?"good":"opt"}">${esc(cd.status||"검토중")}</span></td>
+    <td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" type="button" data-open="${esc(cd.id)}">불러오기</button><button class="btn sm" type="button" data-order="${esc(cd.id)}">리포트 신청</button>${cd.status!=="보유"?`<button class="btn sm" type="button" data-own="${esc(cd.id)}">매입 완료</button>`:`<button class="btn sm" type="button" data-manage="${esc(cd.id)}">관리</button>`}<button class="btn sm danger" type="button" data-del="${esc(cd.id)}">삭제</button></div></td></tr>`).join("")}
+  </tbody></table></div>`;
+  $("#loadEx").onclick=loadExamples;
+  el.querySelectorAll("[data-alias]").forEach(inp=>{inp.onchange=()=>{const d=store.docs[inp.dataset.alias];if(d&&inp.value.trim()){store.put(inp.dataset.alias,{...d,alias:inp.value.trim()});toast("별칭을 바꿨습니다")}};inp.onkeydown=e=>{if(e.key==="Enter")inp.blur()}});
+  el.querySelectorAll("[data-sel]").forEach(cb=>cb.onchange=()=>{const id=cb.dataset.sel;if(cb.checked){if(state.cmpSel.length>=4){cb.checked=false;toast("최대 4개까지 비교할 수 있습니다");return}state.cmpSel.push(id)}else state.cmpSel=state.cmpSel.filter(x=>x!==id);renderCandCompare(list)});
+  el.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>{const d=store.docs[b.dataset.open];state.input={...SAMPLE,...d.input};state.purpose=state.input.purpose||"rent";fillForm();lsSet("bk_draft",state.input);location.hash="#review"});
+  el.querySelectorAll("[data-order]").forEach(b=>b.onclick=()=>startOrder(store.docs[b.dataset.order]));
+  el.querySelectorAll("[data-own]").forEach(b=>b.onclick=()=>{const id=b.dataset.own,d=store.docs[id];store.put(id,{...d,status:"보유",asset:{purchaseDate:today(),purchasePrice:n(d.input?.price)*10000,lender:"",loanBalance:n(d.input?.loan)*10000}});state.selAsset=id;toast("보유 자산으로 옮겼습니다");location.hash="#manage"});
+  el.querySelectorAll("[data-manage]").forEach(b=>b.onclick=()=>{state.selAsset=b.dataset.manage;location.hash="#manage"});
+  el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const tr=b.closest("td");if(b.dataset.confirm){store.del(b.dataset.del);return}b.dataset.confirm="1";b.textContent="삭제 확인";setTimeout(()=>{if(b.isConnected){delete b.dataset.confirm;b.textContent="삭제"}},3000)});
+  renderCandCompare(list);
+}
+function renderCandCompare(list){
+  const el=$("#candCompare");el.hidden=false;
+  const sel=list.filter(c=>state.cmpSel.includes(c.id));
+  if(!sel.length){el.innerHTML=`<p class="muted">비교할 후보를 체크하세요.</p>`;return}
+  const rows=sel.map(cd=>{const i={...SAMPLE,...cd.input};const c=calc(i);return {cd,i,c,fs:fitScores(i,c),r:risks(i,c)}});
+  const best=(f,hi=true)=>{const v=rows.map(f);const t=hi?Math.max(...v):Math.min(...v);return v.map(x=>x===t&&rows.length>1)};
+  const metric=[
+    ["매매가",x=>man(x.c.price),null],["대지 평단가",x=>man(x.c.ppLand),best(x=>x.c.ppLand||Infinity,false)],
+    ["표면수익률",x=>pct(x.c.surface),best(x=>x.c.surface)],["연 현금흐름",x=>man(x.c.cf),best(x=>x.c.cf)],
+    ["자기자본",x=>man(x.c.equity),best(x=>x.c.equity,false)],["자기자본수익률",x=>pct(x.c.coc),best(x=>x.c.coc)],
+    ["DSCR",x=>isFinite(x.c.dscr)?x.c.dscr.toFixed(2):"-",best(x=>isFinite(x.c.dscr)?x.c.dscr:0)],["LTV",x=>pct(x.c.ltv,0),best(x=>x.c.ltv,false)],
+    ["용도지역 (자동)",x=>x.c.a.zone,null],["사용승인 (자동)",x=>x.c.a.year+"년",null],
+    ...Object.keys(PURPOSES).map(k=>[PURPOSES[k]+" 적합도",x=>x.fs[k]+"점 · "+grade(x.fs[k])[0],best(x=>x.fs[k])]),
+    ["높음 리스크",x=>x.r.filter(r=>r[0]==="높음").length+"건",best(x=>x.r.filter(r=>r[0]==="높음").length,false)]];
+  el.innerHTML=`<div class="row" style="justify-content:space-between"><h3>나란히 비교</h3><span class="small muted"><span class="tag good">최적</span> 표시는 해당 항목에서 가장 유리한 후보</span></div>
+  <div class="tbl-wrap"><table><thead><tr><th>항목</th>${rows.map(x=>`<th>${esc(x.cd.alias)}</th>`).join("")}</tr></thead><tbody>
+  ${metric.map(([l,f,b])=>`<tr><th scope="row">${esc(l)}</th>${rows.map((x,ix)=>`<td class="num">${esc(f(x))} ${b&&b[ix]?'<span class="tag good">최적</span>':""}</td>`).join("")}</tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+/* ---------- manage ---------- */
+function assetSummary(a){
+  const recs=store.all("record").filter(r=>r.assetId===a.id);
+  const since=new Date();since.setFullYear(since.getFullYear()-1);const s12=since.toISOString().slice(0,10);
+  const sum=(t,f=()=>true)=>recs.filter(r=>r.type===t&&f(r)).reduce((x,r)=>x+n(r.amount),0);
+  const appr=recs.filter(r=>r.type==="감정가").sort((x,y)=>(y.date||"").localeCompare(x.date||""))[0];
+  const vac={};recs.filter(r=>r.type==="공실").sort((x,y)=>(x.date||"").localeCompare(y.date||"")).forEach(r=>{vac[r.unit||"-"]=r.status==="공실 시작"});
+  const rent12=sum("월세 입금",r=>r.date>=s12&&r.status!=="미납");
+  return {recs,depositTotal:sum("보증금",r=>r.status==="수령")-sum("보증금",r=>r.status!=="수령"),rent12,rentMonthlyAvg:Math.round(rent12/12),
+    unpaid:recs.filter(r=>r.type==="월세 입금"&&r.status==="미납").length,vacancies:Object.keys(vac).filter(k=>vac[k]).join(", "),
+    loanPaid12:sum("대출 원리금",r=>r.date>=s12&&r.status==="납부 완료"),repair12:sum("수리",r=>r.date>=s12),tax12:sum("세금",r=>r.date>=s12),
+    invoiceMissing:recs.filter(r=>r.taxInvoice==="미발행").length,appraisal:appr?n(appr.amount):"",appraisalDate:appr?appr.date:""};
+}
+function renderManage(){
+  const assets=store.all("candidate").filter(c=>c.status==="보유");
+  const bar=$("#assetBar"),body=$("#assetBody");
+  if(!assets.length){
+    bar.innerHTML=`<div class="empty"><b>보유 중인 자산이 없습니다</b><span class="small">4단계 후보 목록에서 '매입 완료'를 누르면 자산이 여기로 옮겨집니다.</span><div class="row"><a class="btn primary" href="#candidates">후보 목록으로</a><button class="btn" type="button" id="demoAsset">예시 자산과 기록 만들기</button></div></div>`;
+    body.innerHTML="";$("#demoAsset").onclick=makeDemoAsset;return}
+  if(!assets.some(a=>a.id===state.selAsset))state.selAsset=assets[0].id;
+  const A=assets.find(a=>a.id===state.selAsset),S=assetSummary(A),as=A.asset||{};
+  bar.innerHTML=`<div class="row" style="justify-content:space-between"><h3>보유 자산 ${assets.length}개</h3><span class="small muted">자산을 골라 기록을 이어서 쌓으세요</span></div>
+    <div class="assets">${assets.map(a=>`<button type="button" class="asset-btn" data-asset="${esc(a.id)}" aria-pressed="${a.id===state.selAsset}"><b>${esc(a.alias)}</b><small>${esc(a.input?.addr)}</small></button>`).join("")}</div>`;
+  bar.querySelectorAll("[data-asset]").forEach(b=>b.onclick=()=>{state.selAsset=b.dataset.asset;state.editingRec=null;renderManage()});
+  const types=["전체",...RTYPES];
+  const recs=S.recs.filter(r=>state.recFilter==="전체"||r.type===state.recFilter).sort((x,y)=>(y.date||"").localeCompare(x.date||""));
+  const ed=state.editingRec?store.docs[state.editingRec]:null;
+  const ft=ed?ed.type:(state.newType||"월세 입금");
+  body.innerHTML=`
+  <div class="panel stack">
+    <div class="row" style="justify-content:space-between;align-items:start">
+      <div class="stack" style="gap:2px;flex:1;min-width:200px"><input class="alias" id="assetAlias" value="${esc(A.alias)}" style="font-size:1.15rem" aria-label="자산 별칭"><span class="small muted" style="padding-left:6px">${esc(A.input?.addr)}</span></div>
+      <div class="form" style="grid-template-columns:repeat(4,minmax(110px,1fr));flex:2;min-width:0">
+        <div class="field"><label for="a_pd">매입일</label><input id="a_pd" type="date" value="${esc(as.purchaseDate||"")}"></div>
+        <div class="field"><label for="a_pp">매입가(원)</label><input id="a_pp" inputmode="numeric" value="${esc(as.purchasePrice?comma(as.purchasePrice):"")}"></div>
+        <div class="field"><label for="a_ld">대출 기관</label><input id="a_ld" value="${esc(as.lender||"")}" placeholder="예) ○○은행"></div>
+        <div class="field"><label for="a_lb">대출 잔액(원)</label><input id="a_lb" inputmode="numeric" value="${esc(as.loanBalance?comma(as.loanBalance):"")}"></div>
+      </div>
+    </div>
+    <div class="kpis">
+      ${kpi("보증금 합계",comma(S.depositTotal)+"원","수령 − 반환")}
+      ${kpi("최근 12개월 월세",comma(S.rent12)+"원","월평균 "+comma(S.rentMonthlyAvg)+"원")}
+      ${kpi("월세 미납",S.unpaid+"건","상태 '미납' 기록")}
+      ${kpi("현재 공실",S.vacancies||"없음","공실 시작 후 미해소 호실")}
+      ${kpi("세금계산서 미발행",S.invoiceMissing+"건","발행 여부 '미발행'")}
+      ${kpi("최근 감정가",S.appraisal?comma(S.appraisal)+"원":"기록 없음",S.appraisalDate||"감정가 기록 추가")}
+    </div>
+  </div>
+  <div class="stack">
+    <form class="panel stack" id="recForm" autocomplete="off">
+      <h3>${ed?"기록 수정":"기록 추가"}</h3>
+      <div class="typechips" role="group" aria-label="기록 구분">${RTYPES.map(t=>`<button type="button" class="chip" data-rtype="${t}" aria-pressed="${t===ft}">${t}</button>`).join("")}</div>
+      <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+        <div class="field"><label for="r_date">일자</label><input id="r_date" type="date" value="${esc(ed?ed.date:today())}"></div>
+        <div class="field"><label for="r_status">상태</label><select id="r_status">${RSTATUS[ft].map(s=>`<option ${ed&&ed.status===s?"selected":""}>${s}</option>`).join("")}</select></div>
+        <div class="field"><label for="r_unit">호실 · 임차인 · 업체</label><input id="r_unit" value="${esc(ed?ed.unit:"")}" placeholder="예) 201호 / ○○카페"></div>
+        <div class="field"><label for="r_amount">${ft==="감정가"?"감정가(원)":"금액(원)"}</label><input id="r_amount" inputmode="numeric" value="${esc(ed&&ed.amount?comma(ed.amount):"")}"></div>
+        <div class="field"><label for="r_tax">세금계산서</label><select id="r_tax">${["해당 없음","발행","미발행"].map(s=>`<option ${((ed?ed.taxInvoice:TAXINV_DEFAULT[ft])||"해당 없음")===s?"selected":""}>${s}</option>`).join("")}</select></div>
+        <div class="field"><label for="r_memo">메모</label><input id="r_memo" value="${esc(ed?ed.memo:"")}" placeholder="${ft==="견적"?"예) 옥상 방수 A업체":ft==="대출 원리금"?"예) 원금 300만 + 이자 720만":""}"></div>
+      </div>
+      <div class="row"><button class="btn primary" type="submit">${ed?"수정 저장":"기록 저장"}</button>${ed?`<button class="btn ghost" type="button" id="cancelEdit">취소</button>`:""}</div>
+    </form>
+    <div class="panel stack" style="min-width:0">
+      <div class="row" style="justify-content:space-between"><h3>기록 장부 <span class="num muted small">${recs.length}건</span></h3>
+        <select id="recFilter" aria-label="구분 필터" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)">${types.map(t=>`<option ${t===state.recFilter?"selected":""}>${t}</option>`).join("")}</select></div>
+      ${recs.length?`<div class="tbl-wrap"><table><thead><tr><th>일자</th><th>구분</th><th>호실·상대방</th><th class="r">금액(원)</th><th>상태</th><th>세금계산서</th><th>메모</th><th></th></tr></thead><tbody>
+      ${recs.map(r=>`<tr><td class="num" style="white-space:nowrap">${esc(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.unit)}</td><td class="r num">${r.amount?comma(r.amount):""}</td>
+        <td><span class="tag ${/미납|연체|미발행|공실 시작/.test(r.status)?"risk":"opt"}">${esc(r.status)}</span></td><td>${r.taxInvoice==="미발행"?'<span class="tag risk">미발행</span>':esc(r.taxInvoice||"")}</td><td class="small">${esc(r.memo)}</td>
+        <td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" type="button" data-next="${esc(r.id)}" title="같은 내용으로 다음 달 기록">다음 달</button><button class="btn sm" type="button" data-edit="${esc(r.id)}">수정</button><button class="btn sm danger" type="button" data-rdel="${esc(r.id)}">삭제</button></div></td></tr>`).join("")}
+      </tbody></table></div>`:`<div class="empty"><span>이 자산에는 ${state.recFilter==="전체"?"":esc(state.recFilter)+" "}기록이 없습니다. 왼쪽에서 첫 기록을 추가하세요.</span></div>`}
+    </div>
+  </div>
+  ${exportPanel(assets)}`;
+  // bindings
+  $("#assetAlias").onchange=e=>{if(e.target.value.trim())store.put(A.id,{...store.docs[A.id],alias:e.target.value.trim()})};
+  [["a_pd","purchaseDate",false],["a_pp","purchasePrice",true],["a_ld","lender",false],["a_lb","loanBalance",true]].forEach(([id,k,num])=>{$("#"+id).onchange=e=>{const d=store.docs[A.id];store.put(A.id,{...d,asset:{...(d.asset||{}),[k]:num?n(e.target.value):e.target.value}})}});
+  body.querySelectorAll("[data-rtype]").forEach(b=>b.onclick=()=>{if(ed){ed.type=b.dataset.rtype}state.newType=b.dataset.rtype;if(ed)state.editingRecType=b.dataset.rtype;rerenderKeepForm(b.dataset.rtype)});
+  $("#recForm").onsubmit=e=>{e.preventDefault();
+    const type=(body.querySelector("[data-rtype][aria-pressed='true']")||{}).dataset?.rtype||ft;
+    const rec={kind:"record",assetId:A.id,type,date:$("#r_date").value||today(),status:$("#r_status").value,unit:$("#r_unit").value.trim(),amount:n($("#r_amount").value),taxInvoice:$("#r_tax").value,memo:$("#r_memo").value.trim(),updatedAt:new Date().toISOString()};
+    const id=state.editingRec||("rec_"+uid());state.editingRec=null;store.put(id,rec);toast(type+" 기록을 저장했습니다")};
+  const ce=$("#cancelEdit");if(ce)ce.onclick=()=>{state.editingRec=null;renderManage()};
+  $("#recFilter").onchange=e=>{state.recFilter=e.target.value;renderManage()};
+  body.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{state.editingRec=b.dataset.edit;renderManage();$("#recForm").scrollIntoView({block:"nearest"})});
+  body.querySelectorAll("[data-next]").forEach(b=>b.onclick=()=>{const r=store.docs[b.dataset.next];const d=new Date((r.date||today())+"T00:00:00");d.setMonth(d.getMonth()+1);
+    const status=r.type==="월세 입금"?"미납":r.type==="대출 원리금"?"납부 예정":r.status;
+    store.put("rec_"+uid(),{...r,date:d.toISOString().slice(0,10),status,taxInvoice:TAXINV_DEFAULT[r.type]||r.taxInvoice,updatedAt:new Date().toISOString()});toast("다음 달 기록을 만들었습니다. 입금되면 상태를 바꾸세요")});
+  body.querySelectorAll("[data-rdel]").forEach(b=>b.onclick=()=>{if(b.dataset.confirm){store.del(b.dataset.rdel);return}b.dataset.confirm="1";b.textContent="삭제 확인";setTimeout(()=>{if(b.isConnected){delete b.dataset.confirm;b.textContent="삭제"}},3000)});
+  bindExport(assets);
+}
+function rerenderKeepForm(type){
+  const keep={date:$("#r_date").value,unit:$("#r_unit").value,amount:$("#r_amount").value,memo:$("#r_memo").value};
+  state.newType=type;
+  if(state.editingRec){const d=store.docs[state.editingRec];store.docs[state.editingRec]={...d,type}} // local only until save
+  renderManage();
+  $("#r_date").value=keep.date;$("#r_unit").value=keep.unit;$("#r_amount").value=keep.amount;$("#r_memo").value=keep.memo;
+}
+function makeDemoAsset(){
+  const id="cand_"+uid();
+  store.put(id,{kind:"candidate",alias:"망원 코너 근생 (예시)",input:{...SAMPLE},status:"보유",example:true,createdAt:new Date().toISOString(),asset:{purchaseDate:"2026-03-15",purchasePrice:3200000000,lender:"예시은행",loanBalance:1870000000}});
+  const R=[["2026-03-15","계약","1층 카페","",  "신규 체결","해당 없음","보증금 1억 / 월 450만, 2028-03 만료"],["2026-03-15","보증금","1층 카페",100000000,"수령","해당 없음",""],
+    ["2026-03-15","감정가","",3050000000,"감정 완료","해당 없음","대출 실행 시 감정"],["2026-04-25","대출 원리금","예시은행",10280000,"납부 완료","해당 없음","원금 300만 + 이자 728만"],
+    ["2026-05-25","대출 원리금","예시은행",10270000,"납부 완료","해당 없음",""],["2026-04-05","월세 입금","1층 카페",4500000,"입금 완료","발행",""],
+    ["2026-05-05","월세 입금","1층 카페",4500000,"입금 완료","미발행","세금계산서 요청 받음"],["2026-04-05","월세 입금","201호",2500000,"입금 완료","발행",""],
+    ["2026-05-05","월세 입금","201호",2500000,"미납","미발행","5/12 재안내"],["2026-04-30","공실","301호","","공실 시작","해당 없음","임차인 퇴거"],
+    ["2026-05-10","견적","옥상 방수 A업체",8800000,"접수","해당 없음",""],["2026-05-12","견적","옥상 방수 B업체",7600000,"채택","해당 없음",""],
+    ["2026-06-02","수리","옥상 방수 B업체",7600000,"완료","발행",""],["2026-07-31","세금","재산세(건물분)",3120000,"납부 완료","해당 없음",""]];
+  R.forEach(([date,type,unit,amount,status,taxInvoice,memo])=>store.put("rec_"+uid(),{kind:"record",assetId:id,date,type,unit,amount:amount||0,status,taxInvoice,memo,example:true,updatedAt:new Date().toISOString()}));
+  state.selAsset=id;toast("예시 자산과 기록 14건을 만들었습니다");
+}
+function exportPanel(assets){
+  const X=state.exp||(state.exp={asset:[...LOAN_PRESET.asset],rec:[...LOAN_PRESET.rec],types:[...LOAN_PRESET.types],assets:"current",from:"",to:""});
+  return `<div class="panel stack" id="exportPanel">
+    <div class="row" style="justify-content:space-between"><h3>대출 의뢰용 엑셀 내보내기</h3>
+      <div class="row"><button class="btn sm" type="button" id="presetLoan">대출 의뢰 기본값</button><button class="btn sm ghost" type="button" id="presetAll">전체 선택</button></div></div>
+    <div class="row small"><label><input type="radio" name="exA" value="current" ${X.assets==="current"?"checked":""}> 선택한 자산만</label><label><input type="radio" name="exA" value="all" ${X.assets==="all"?"checked":""}> 보유 자산 전체 (${assets.length}개)</label>
+      <span class="muted">기간</span><input type="date" id="exFrom" value="${esc(X.from)}" aria-label="시작일"> ~ <input type="date" id="exTo" value="${esc(X.to)}" aria-label="종료일"></div>
+    <details open><summary>시트 1 · 자산 요약 컬럼 (${X.asset.length})</summary><div class="cols" style="margin-top:8px">${ASSET_COLS.map(([k,l])=>`<label><input type="checkbox" data-exa="${k}" ${X.asset.includes(k)?"checked":""}>${l}</label>`).join("")}</div></details>
+    <details open><summary>시트 2 · 관리 기록 컬럼 (${X.rec.length})</summary><div class="cols" style="margin-top:8px">${REC_COLS.map(([k,l])=>`<label><input type="checkbox" data-exr="${k}" ${X.rec.includes(k)?"checked":""}>${l}</label>`).join("")}</div>
+      <p class="small muted" style="margin-top:8px">포함할 기록 구분</p><div class="cols">${RTYPES.map(t=>`<label><input type="checkbox" data-ext="${t}" ${X.types.includes(t)?"checked":""}>${t}</label>`).join("")}</div></details>
+    <div class="row"><button class="btn primary" type="button" id="doExport">엑셀(.xlsx) 내보내기</button><span class="small muted" id="exMsg"></span></div>
+  </div>`;
+}
+function bindExport(assets){
+  const X=state.exp,p=$("#exportPanel");
+  p.querySelectorAll("[data-exa]").forEach(c=>c.onchange=()=>{X.asset=ASSET_COLS.map(a=>a[0]).filter(k=>p.querySelector(`[data-exa="${k}"]`).checked)});
+  p.querySelectorAll("[data-exr]").forEach(c=>c.onchange=()=>{X.rec=REC_COLS.map(a=>a[0]).filter(k=>p.querySelector(`[data-exr="${k}"]`).checked)});
+  p.querySelectorAll("[data-ext]").forEach(c=>c.onchange=()=>{X.types=RTYPES.filter(t=>p.querySelector(`[data-ext="${t}"]`).checked)});
+  p.querySelectorAll("[name=exA]").forEach(r=>r.onchange=()=>X.assets=r.value);
+  $("#exFrom").onchange=e=>X.from=e.target.value;$("#exTo").onchange=e=>X.to=e.target.value;
+  $("#presetLoan").onclick=()=>{state.exp={...X,asset:[...LOAN_PRESET.asset],rec:[...LOAN_PRESET.rec],types:[...LOAN_PRESET.types]};renderManage()};
+  $("#presetAll").onclick=()=>{state.exp={...X,asset:ASSET_COLS.map(a=>a[0]),rec:REC_COLS.map(a=>a[0]),types:[...RTYPES]};renderManage()};
+  $("#doExport").onclick=()=>doExport(assets);
+}
+async function doExport(assets){
+  const X=state.exp,msg=$("#exMsg");
+  if(!window.XLSX){msg.textContent="엑셀 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도하세요.";return}
+  if(!X.asset.length&&!X.rec.length){msg.textContent="컬럼을 하나 이상 선택하세요.";return}
+  const list=X.assets==="all"?assets:assets.filter(a=>a.id===state.selAsset);
+  const wb=XLSX.utils.book_new();
+  if(X.asset.length){
+    const rows=list.map(a=>{const S=assetSummary(a),as=a.asset||{},i=a.input||{};
+      const all={alias:a.alias,addr:i.addr,purchaseDate:as.purchaseDate,purchasePrice:as.purchasePrice,land:n(i.land),gfa:n(i.gfa),appraisal:S.appraisal,appraisalDate:S.appraisalDate,lender:as.lender,loanBalance:as.loanBalance,loanPaid12:S.loanPaid12,depositTotal:S.depositTotal,rent12:S.rent12,rentMonthlyAvg:S.rentMonthlyAvg,unpaid:S.unpaid,vacancies:S.vacancies,repair12:S.repair12,tax12:S.tax12,invoiceMissing:S.invoiceMissing};
+      const o={};ASSET_COLS.forEach(([k,l])=>{if(X.asset.includes(k))o[l]=all[k]===undefined?"":all[k]});return o});
+    const ws=XLSX.utils.json_to_sheet(rows);ws["!cols"]=X.asset.map(()=>({wch:18}));XLSX.utils.book_append_sheet(wb,ws,"자산요약");
+  }
+  if(X.rec.length){
+    const rows=[];list.forEach(a=>store.all("record").filter(r=>r.assetId===a.id&&X.types.includes(r.type)&&(!X.from||r.date>=X.from)&&(!X.to||r.date<=X.to)).sort((x,y)=>(x.date||"").localeCompare(y.date||"")).forEach(r=>{
+      const all={date:r.date,asset:a.alias,addr:a.input?.addr,type:r.type,unit:r.unit,amount:r.amount||"",status:r.status,taxInvoice:r.taxInvoice,memo:r.memo};
+      const o={};REC_COLS.forEach(([k,l])=>{if(X.rec.includes(k))o[l]=all[k]==null?"":all[k]});rows.push(o)}));
+    const ws=XLSX.utils.json_to_sheet(rows.length?rows:[Object.fromEntries(REC_COLS.filter(c=>X.rec.includes(c[0])).map(c=>[c[1],""]))]);ws["!cols"]=X.rec.map(()=>({wch:16}));XLSX.utils.book_append_sheet(wb,ws,"관리기록");
+  }
+  const buf=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  const name=`대출의뢰_${(X.assets==="all"?"보유자산전체":list[0]?.alias||"자산").replace(/[\\/:*?"<>|]/g,"")}_${today()}.xlsx`;
+  let dl=null;try{dl=window.claude&&window.claude.use?await window.claude.use("downloads"):null}catch(e){}
+  if(!dl){msg.textContent="이 화면에서는 파일 저장을 쓸 수 없습니다. claude.ai에서 열어 주세요.";return}
+  try{await dl.save({filename:name,data:new Blob([buf])});msg.textContent="저장했습니다: "+name}
+  catch(e){msg.textContent=e&&e.code==="declined"?"저장을 취소했습니다.":"저장하지 못했습니다 ("+(e&&e.code||"오류")+")"}
+}
+
+/* ---------- routing & global ---------- */
+const VIEWS=["review","compare","order","candidates","manage"];
+function current(){const h=location.hash.slice(1);return VIEWS.includes(h)?h:"review"}
+function renderView(){
+  const v=current();
+  VIEWS.forEach(x=>{$("#v-"+x).hidden=x!==v});
+  document.querySelectorAll("nav.steps a").forEach(a=>{if(a.dataset.view===v)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
+  if(v==="review"){renderFirstQ();markRequired();renderResults();track("review")}
+  if(v==="compare"){renderCompare();track("compare")}
+  if(v==="order")renderOrder();
+  if(v==="candidates")renderCandidates();
+  if(v==="manage")renderManage();
+}
+function renderData(){const v=current();if(v==="candidates")renderCandidates();if(v==="manage"){const f=document.activeElement;if(f&&f.closest&&f.closest("#recForm,#exportPanel")&&f.tagName!=="BUTTON")return;renderManage()}}
+function renderAll(){renderView()}
+function setPersona(p){state.persona=p;lsSet("bk_persona",p);document.querySelectorAll("[data-persona]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.persona===p));state.exitPicked=[];renderView()}
+function setPurpose(p){state.purpose=p;state.input.purpose=p;lsSet("bk_draft",state.input);$("#g_purpose").value=p;$("#f_purpose").value=p;renderView()}
+document.querySelectorAll("[data-persona]").forEach(b=>b.onclick=()=>setPersona(b.dataset.persona));
+$("#g_purpose").onchange=e=>setPurpose(e.target.value);
+window.addEventListener("hashchange",()=>{renderView();window.scrollTo({top:0})});
+
+fillForm();setPersona(state.persona);initStore().then(()=>{const v=current();if(v==="review"||v==="compare")track(v)});
+})();
+</script>
